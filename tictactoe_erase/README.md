@@ -13,11 +13,14 @@
 | ファイル | 役割 |
 |---|---|
 | `erase_core.py` | 消去処理の本体（LeRobot に依存しない） |
+| `brightness.py` | 明るさを空盤面の画像に合わせる処理の本体（LeRobot に依存しない） |
+| `brightness_step.py` | 明るさ補正を LeRobot の観測プロセッサとして使うためのステップ |
 | `cam_util.py` | カメラを開く共通処理（LeRobot の OpenCVCamera を使用） |
 | `capture_empty.py` | 空盤面の基準画像 `empty_board.png` を撮る |
 | `make_roi.py` | 盤面の範囲マスク `board_roi_mask.png` を作る |
 | `test_erase_live.py` | ロボットを動かさず、カメラだけで消去の様子を確認する |
 | `rollout_erase.py` | `lerobot-rollout` と同じ引数で、消去処理つきで推論を実行する |
+| `record_bright.py` | `lerobot-record` と同じ引数で、明るさ補正つきで学習データを記録する |
 
 全部を同じフォルダに置き、**そのフォルダで** 以下のコマンドを実行してください。
 
@@ -128,6 +131,25 @@ python rollout_erase.py \
 - `--display_data=true` にすると、Rerun に **消去後の画像** が表示される（ポリシーが見ている画像そのもの）
 
 比較のために消去なしで動かしたいときは `--erase.enable=false` を付けます。
+
+ポリシーに渡す画像は、消去の前に **明るさを `empty_board.png` に合わせて** います（明るさ補正）。
+補正なしで動かしたいときは `--erase.bright=false` を付けます。
+
+### 明るさ補正つきで学習データを記録する
+
+推論時と学習データの明るさを揃えるため、記録にも同じ補正をかけます。
+**今使っている `lerobot-record` のコマンドの `lerobot-record` を `python record_bright.py` に置き換えて、`--bright.cam` を足すだけ** です。
+
+```bash
+python record_bright.py <いつもの lerobot-record の引数> --bright.cam=<カメラ名>
+```
+
+- 基準は `empty_board.png`、比較に使う範囲は `board_roi_mask.png`（手順1・2で作ったもの）
+- 記録される画像・Rerun に表示される画像は補正後の画像
+- 補正なしで記録したいときは `--bright.enable=false`
+- 補正なしで撮った既存の学習データとは明るさが変わるので、新しく撮ったデータと混ぜるときは注意
+
+`test_erase_live.py` では **b** で明るさ補正のオン/オフを切り替えられます。画面下の `raw/ref` が補正前の明るさの比（1.00 なら補正不要）です。
 
 ### 5. 結果を確認する
 
