@@ -21,8 +21,38 @@
 | `test_erase_live.py` | ロボットを動かさず、カメラだけで消去の様子を確認する |
 | `rollout_erase.py` | `lerobot-rollout` と同じ引数で、消去処理つきで推論を実行する |
 | `record_bright.py` | `lerobot-record` と同じ引数で、明るさ補正つきで学習データを記録する |
+| `tictactoe_core.py` | 〇×ゲームの盤面と、ロボットの手を決める処理（LeRobot に依存しない） |
+| `game.py` | 〇×ゲームの進行役。置いたマスを記録し、マスごとのモデルで `rollout_erase.py` を実行する |
+| `game_config.json` | `game.py` の設定（マスごとのモデル・タスク文、rollout の共通の引数） |
 
 全部を同じフォルダに置き、**そのフォルダで** 以下のコマンドを実行してください。
+
+## 使うときの流れ
+
+### 最初に1回だけ（カメラや盤面を動かしたらやり直す）
+
+```bash
+conda activate lerobot
+cd tictactoe_erase
+python capture_empty.py --index <カメラ番号> --width 640 --height 480 --fps 30 --out empty_board.png   # キューブなし・アームはホーム位置で SPACE
+python make_roi.py --bg empty_board.png                                                      # 盤面の角をクリック → Enter
+```
+
+- `empty_board.png`（空盤面）と `board_roi_mask.png`（消去する範囲）ができる
+- 詳しくは下の「手順」の 0〜2。消去の様子は手順3の `test_erase_live.py` で確認できる
+
+### 対戦（〇×ゲーム）
+
+```bash
+python game.py new --first human   # 対戦を始める（ロボットが先手なら --first robot）
+python game.py human 22            # 人の番: 置きたいマス（行・列の2桁）を指示 → ロボットがピンクを置く
+python game.py robot               # ロボットの番: マスを自動で決める → ロボットが青を置く
+# 決着するまで human / robot を交互に
+```
+
+- 毎回「ストック置き場にキューブを置き、アームをホーム位置にして Enter」→ rollout → 「置けた？ [Y/n]」の順に進む
+- 置いたマスは `game_state.json`（3×3 の行列）と `game_log.csv`（表）に記録される
+- 詳しくは下の「〇×ゲームの進行（game.py）」
 
 ---
 
@@ -157,6 +187,63 @@ python record_bright.py <いつもの lerobot-record の引数> --bright.cam=<�
 
 - `S_turn_start.png` : ターン開始時の画像
 - `frame_00000.jpg` … : 15フレームごとの `[元画像 | 消去後 | マスク]`
+
+---
+
+## 〇×ゲームの進行（game.py）
+
+置いたマスを記録し、ロボットの手は自動で決めます。**置く作業はどちらの手もロボット** がやります（人はマスの番号を指示するだけ）。
+マスごとのモデルで `rollout_erase.py` を実行するので、上の手順 0〜3 を済ませておいてください。
+
+マスの名前は「行・列」の2桁です（左上 = 1行1列 = `11`）。モデル名の `cell11`〜`cell33` と同じです。
+
+```
+11 12 13
+21 22 23
+31 32 33
+```
+
+### コマンド
+
+| コマンド | 動き |
+|---|---|
+| `python game.py new --first robot` | 新しい対戦を始める（人が先手なら `--first human`） |
+| `python game.py human 22` | 人の手。人の色（ピンク）のキューブをマス22（真ん中）にロボットが置く |
+| `python game.py robot` | ロボットの手。置くマスを自動で決めて、ロボットの色（青）のキューブを置く |
+| `python game.py show` | 今の盤面と手の履歴を表示 |
+| `python game.py undo` | 最後の1手を記録から取り消す（盤面のキューブは手でどける） |
+
+`human` / `robot` を実行すると:
+
+1. 「ストック置き場に◯色のキューブを置き、アームをホーム位置にして Enter」と出るので、準備して Enter
+2. そのマスのモデルで `rollout_erase.py` が実行される（引数は `game_config.json` から）
+3. 終わると「置けましたか？ [Y/n]」と出る。**Y で記録**、n なら記録しない（同じコマンドでやり直せる）
+
+付けられるオプション:
+
+- `--no_run` : rollout せず記録だけ（モデルがまだないマスに手で置いたとき、失敗して手で直したとき）
+- `--dry_run` : 実行される rollout のコマンドを表示するだけ（記録もしない）
+
+### ロボットの手の決め方
+
+〇×ゲームには、相手が最善を尽くしても必ず勝てる手順（必勝法）はありません。お互い最善なら引き分けです。
+そこで、全部の手を最後まで読んで（ミニマックス）**絶対に負けない手** を選び、その中で **相手がミスしやすい手** を選びます。
+相手がミスしたら必ず勝ちに行きます。人のあらゆる打ち方を全部試して、ロボットが一度も負けないことを確認済みです。
+
+### 記録されるもの
+
+- `game_state.json` : 今の対戦の盤面（3×3 の行列。`1`=ロボット `-1`=人 `0`=空）と手の履歴
+- `game_log.csv` : 全対戦の表（1手1行）。`game_id, move_no, player, cell, row, col, time, result`（`cell` は 11〜33、`row`・`col` は 1 始まり）
+  - `result` は決着した手にだけ入る（ロボットから見て `win` / `lose` / `draw`）
+
+### game_config.json（モデルを足すとき）
+
+- `rollout_args` : 手順4のコマンドのうち、マスによって変わらない引数（ポート・カメラ・`--erase.*` など）。1行に1つ
+- `cells` : マス番号ごとのモデル（`policy`）とタスク文（`task`）。**学習したときと同じタスク文** にする
+  - キーはマスの名前（`11`〜`33`）。モデル名は `DQwalk/act_so101_place_2cam_cell<行><列>` にそろえる
+  - 今は 11〜13 だけ。モデルができたら `"21": {"policy": "DQwalk/act_so101_place_2cam_cell21", "task": "..."}` のように足す
+  - 書いていないマスを指定すると「手で置いて `--no_run` で記録して」と表示される
+- `colors` / `marks` : ストックに置く色の表示と、盤面の表示記号
 
 ---
 
