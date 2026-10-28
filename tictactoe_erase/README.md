@@ -241,7 +241,7 @@ python record_bright.py <いつもの lerobot-record の引数> --bright.cam=<�
 - `rollout_args` : 手順4のコマンドのうち、マスによって変わらない引数（ポート・カメラ・`--erase.*` など）。1行に1つ
 - `cells` : マス番号ごとのモデル（`policy`）とタスク文（`task`）。**学習したときと同じタスク文** にする
   - キーはマスの名前（`11`〜`33`）。モデル名は `DQwalk/act_so101_place_2cam_cell<行><列>` にそろえる
-  - 今は 11〜13 だけ。モデルができたら `"21": {"policy": "DQwalk/act_so101_place_2cam_cell21", "task": "..."}` のように足す
+  - 今は 9マスすべて登録済み。モデルを入れ替えるときは `"21": {"policy": "DQwalk/act_so101_place_2cam_cell21", "task": "..."}` の policy を書き換える
   - 書いていないマスを指定すると「手で置いて `--no_run` で記録して」と表示される
 - `colors` / `marks` : ストックに置く色の表示と、盤面の表示記号
 
