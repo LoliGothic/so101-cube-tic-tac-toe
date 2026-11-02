@@ -5,15 +5,21 @@
     "--robot.port=/dev/tty.usbmodem5B7B0160971",
     "--robot.id=my_follower_arm",
     "--robot.cameras={ hand: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}, top: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}",
-    "--duration=30",
-    "--display_data=true",
+    "--duration=60",
+    "--display_data=false",
     "--erase.cam=top",
     "--erase.debug_dir=debug_frames"
   ],
   "cells": {
     "11": {"policy": "DQwalk/act_so101_place_2cam_cell11", "task": "Pick up the blue block and put it in the top-left square"},
     "12": {"policy": "DQwalk/act_so101_place_2cam_cell12", "task": "Pick up the blue block and put it in the top-left square"},
-    "13": {"policy": "DQwalk/act_so101_place_2cam_cell13", "task": "Pick up the blue block and put it in the top-left square"}
+    "13": {"policy": "DQwalk/act_so101_place_2cam_cell13", "task": "Pick up the blue block and put it in the top-left square"},
+    "21": {"policy": "DQwalk/act_so101_place_2cam_cell21", "task": "Pick up the blue block and put it in the top-left square"},
+    "22": {"policy": "DQwalk/act_so101_pick_place_2cam_300000", "task": "Pick up the blue block and put it in the top-left square"},
+    "23": {"policy": "DQwalk/act_so101_place_2cam_cell23", "task": "Pick up the blue block and put it in the top-left square"},
+    "31": {"policy": "DQwalk/act_so101_place_2cam_cell31", "task": "Pick up the blue block and put it in the top-left square"},
+    "32": {"policy": "DQwalk/act_so101_place_2cam_cell32", "task": "Pick up the blue block and put it in the top-left square"},
+    "33": {"policy": "DQwalk/act_so101_place_2cam_cell33", "task": "Pick up the blue block and put it in the top-left square"}
   },
   "colors": {"robot": "青", "human": "ピンク"},
   "marks": {"robot": "B", "human": "P"}

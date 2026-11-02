@@ -268,7 +268,7 @@ python make_hand_ref.py --repo_id <学習データの repo_id> --cam hand
 
 - `rollout_args` : 手順4のコマンドのうち、マスによって変わらない引数（ポート・カメラ・`--erase.*` など）。1行に1つ
 - `cells` : マス番号ごとのモデル（`policy`）とタスク文（`task`）。**学習したときと同じタスク文** にする
-  - キーはマスの名前（`11`〜`33`）。モデル名は `DQwalk/act_so101_place_2cam_cell<行><列>` にそろえる
+  - キーはマスの名前（`11`〜`33`）。モデル名は `DQwalk/act_so101_place_2cam_cell<行><列>` にそろえる（`22` だけ例外で `DQwalk/act_so101_pick_place_2cam_300000`）
   - 今は 11〜13 だけ。モデルができたら `"21": {"policy": "DQwalk/act_so101_place_2cam_cell21", "task": "..."}` のように足す
   - 書いていないマスを指定すると「手で置いて `--no_run` で記録して」と表示される
 - `colors` / `marks` : ストックに置く色の表示と、盤面の表示記号
