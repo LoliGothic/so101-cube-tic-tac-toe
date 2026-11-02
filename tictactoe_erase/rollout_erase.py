@@ -13,11 +13,15 @@ lerobot-rollout と同じ引数で動き、俯瞰カメラの画像から「盤�
   --erase.roi=board_roi_mask.png    盤面ROIマスク
   --erase.debug_dir=debug_frames    確認用画像の保存先（空なら保存しない）
   --erase.debug_every=15            何フレームに1回保存するか
+  --erase.save_cams=hand            補正前の生の画像も保存するカメラ名（カンマ区切り。空なら保存しない）
   --erase.static_thresh=30          置いてあるキューブとみなす差分のしきい値
   --erase.arm_thresh=35             アームとみなす差分のしきい値
   --erase.arm_hole_fill=31          アームのマスクの穴埋めサイズ
   --erase.enable=true               false にすると消去なし（比較用）
   --erase.bright=true               画像の明るさを空盤面の画像に合わせる（false で補正なし）
+  --erase.hand_cam=hand            明るさを hand_ref.png（学習データ）に合わせる手元カメラ名（空なら補正しない）
+  --erase.hand_ref=hand_ref.png     手元カメラの基準画像（make_hand_ref.py で作る）
+  --erase.hand_frames=0             0 なら毎フレーム補正（学習時の自動露出を再現）。N なら開始時の N フレームで補正量を固定
 
 例:
   python rollout_erase.py \
@@ -51,11 +55,15 @@ ERASE_DEFAULTS = {
     "roi": "board_roi_mask.png",
     "debug_dir": "",
     "debug_every": "15",
+    "save_cams": "hand",
     "static_thresh": "30",
     "arm_thresh": "35",
     "arm_hole_fill": "31",
     "enable": "true",
     "bright": "true",
+    "hand_cam": "hand",
+    "hand_ref": "hand_ref.png",
+    "hand_frames": "0",
 }
 
 
@@ -96,7 +104,7 @@ from lerobot.processor.converters import (  # noqa: E402
     transition_to_observation,
 )
 
-from brightness_step import MatchBrightnessStep  # noqa: E402
+from brightness_step import MatchBrightnessStep, make_hand_step  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +167,35 @@ class EraseCubesStep(ObservationProcessorStep):
         return features   # 画像の大きさ・型は変えない
 
 
+class SaveRawFramesStep(ObservationProcessorStep):
+    """指定カメラの補正前の画像を debug_dir に {カメラ名}_XXXXX.jpg として保存する（学習データとの見比べ用）。"""
+
+    def __init__(self, cam_keys: list[str], debug_dir: str, debug_every: int = 15):
+        self.cam_keys = cam_keys
+        self.debug_dir = debug_dir
+        self.debug_every = max(1, debug_every)
+        self._n = 0
+        os.makedirs(debug_dir, exist_ok=True)
+
+    def observation(self, observation: dict) -> dict:
+        if self._n % self.debug_every == 0:
+            for k in self.cam_keys:
+                if k not in observation:
+                    if self._n == 0:
+                        logger.warning("カメラ '%s' が観測にないので保存しません（--erase.save_cams）", k)
+                    continue
+                cv2.imwrite(os.path.join(self.debug_dir, f"{k}_{self._n:05d}.jpg"),
+                            cv2.cvtColor(observation[k], cv2.COLOR_RGB2BGR))
+        self._n += 1
+        return observation
+
+    def reset(self) -> None:
+        self._n = 0
+
+    def transform_features(self, features):
+        return features
+
+
 def _is_false(v: str) -> bool:
     return v.lower() in ("false", "0", "no")
 
@@ -168,11 +205,19 @@ def make_obs_processor():
     roi = load_mask(ERASE_OPTS["roi"])
     steps = []
 
+    # 補正をかける前の生の画像を保存する
+    save_cams = [c.strip() for c in ERASE_OPTS["save_cams"].split(",") if c.strip()]
+    if ERASE_OPTS["debug_dir"] and save_cams:
+        steps.append(SaveRawFramesStep(save_cams, ERASE_OPTS["debug_dir"], int(ERASE_OPTS["debug_every"])))
+
     # 先に明るさを空盤面の画像に合わせてから消去する（消去の差分計算も安定する）
     if _is_false(ERASE_OPTS["bright"]):
         logger.info("--erase.bright=false なので明るさ補正なしで実行します")
     else:
         steps.append(MatchBrightnessStep(cam_key=ERASE_OPTS["cam"], matcher=BrightnessMatcher(bg, roi)))
+        hand = make_hand_step(ERASE_OPTS["hand_cam"], ERASE_OPTS["hand_ref"], int(ERASE_OPTS["hand_frames"]))
+        if hand is not None:
+            steps.append(hand)
 
     if _is_false(ERASE_OPTS["enable"]):
         logger.info("--erase.enable=false なので消去処理なしで実行します")

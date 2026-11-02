@@ -24,6 +24,8 @@
 | `tictactoe_core.py` | 〇×ゲームの盤面と、ロボットの手を決める処理（LeRobot に依存しない） |
 | `game.py` | 〇×ゲームの進行役。置いたマスを記録し、マスごとのモデルで `rollout_erase.py` を実行する |
 | `game_config.json` | `game.py` の設定（マスごとのモデル・タスク文、rollout の共通の引数） |
+| `check_brightness.py` | カメラの明るさ・白飛びを基準画像と見比べる（露出を合わせるときに使う） |
+| `make_hand_ref.py` | 学習データの開始時の画像から、手元カメラの明るさの基準 `hand_ref.png` を作る |
 
 全部を同じフォルダに置き、**そのフォルダで** 以下のコマンドを実行してください。
 
@@ -178,6 +180,32 @@ python record_bright.py <いつもの lerobot-record の引数> --bright.cam=<�
 - 記録される画像・Rerun に表示される画像は補正後の画像
 - 補正なしで記録したいときは `--bright.enable=false`
 - 補正なしで撮った既存の学習データとは明るさが変わるので、新しく撮ったデータと混ぜるときは注意
+
+### 手元カメラの明るさ補正
+
+学習データ（DQwalk/so101_pick_place_2cam_100）の手元カメラは自動露出がオンで、どの景色でも画面全体の平均の明るさがほぼ一定（約100）でした。
+そこで **毎フレーム、画面全体の平均の明るさ・色味を `hand_ref.png`（学習データの開始時の画像）と同じにします**（自動露出をソフトで再現）。
+`--erase.hand_frames=10` のように指定すると、開始時の10フレームで補正量を決めて固定する方式になります。
+白飛びした部分は補正では戻らないので、先に次のコマンドで露出を合わせてください（アームを手で動かして机や盤面を見下ろす向きにする）。
+
+```bash
+python check_brightness.py --index <手元カメラの番号> --ref hand_ref.png
+```
+
+CameraController で手元カメラの Exposure の Auto を切って下げ、**机や盤面を見下ろしたときに** `white` が 1% 前後になるようにします
+（暗めになっても、明るさはソフトで約100に合わせるので大丈夫です）。
+途中で自動露出が動いた分は直らないので、手元カメラも手順0で自動露出を止めてください。
+
+`hand_ref.png` は学習データから作ります（Hugging Face から動画を1ファイルだけダウンロードします）。
+
+```bash
+python make_hand_ref.py --repo_id <学習データの repo_id> --cam hand
+```
+
+`hand_ref.png` があれば、`rollout_erase.py` / `record_bright.py` は手元カメラ（`hand`）にも自動で補正をかけます。
+カメラ名が違うときは `--erase.hand_cam=<名前>`（記録は `--bright.hand_cam=<名前>`）、補正しないときは `--erase.hand_cam=` のように空にします。
+
+`rollout_erase.py` は、補正前の手元カメラの画像を `debug_frames/hand_XXXXX.jpg` にも保存します（`--erase.save_cams` で変更）。
 
 `test_erase_live.py` では **b** で明るさ補正のオン/オフを切り替えられます。画面下の `raw/ref` が補正前の明るさの比（1.00 なら補正不要）です。
 

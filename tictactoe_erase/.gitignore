@@ -5,3 +5,4 @@ model_local/model.safetensors
 model_local/.cache/
 game_state.json
 game_log.csv
+hf_dataset_cache/

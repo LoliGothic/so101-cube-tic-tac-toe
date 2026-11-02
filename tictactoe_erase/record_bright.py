@@ -12,6 +12,9 @@ rollout_erase.py も同じ基準画像に合わせるので、学習データと
   --bright.ref=empty_board.png      基準画像（この明るさに合わせる）
   --bright.roi=board_roi_mask.png   明るさの比較に使う盤面ROIマスク
   --bright.enable=true              false にすると補正なし（比較用）
+  --bright.hand_cam=hand            明るさを hand_ref.png（学習データ）に合わせる手元カメラ名（空なら補正しない）
+  --bright.hand_ref=hand_ref.png    手元カメラの基準画像（make_hand_ref.py で作る）
+  --bright.hand_frames=0             0 なら毎フレーム補正（学習時の自動露出を再現）。N なら開始時の N フレームで補正量を固定
 
 例:
   python record_bright.py \
@@ -40,6 +43,9 @@ BRIGHT_DEFAULTS = {
     "ref": "empty_board.png",
     "roi": "board_roi_mask.png",
     "enable": "true",
+    "hand_cam": "hand",
+    "hand_ref": "hand_ref.png",
+    "hand_frames": "0",
 }
 
 
@@ -81,7 +87,7 @@ from lerobot.processor.converters import (  # noqa: E402
 )
 from lerobot.utils.import_utils import register_third_party_plugins  # noqa: E402
 
-from brightness_step import MatchBrightnessStep  # noqa: E402
+from brightness_step import MatchBrightnessStep, make_hand_step  # noqa: E402
 
 
 def make_obs_processor():
@@ -89,8 +95,12 @@ def make_obs_processor():
         logger.info("--bright.enable=false なので明るさ補正なしで記録します")
         return None
     matcher = BrightnessMatcher(load_rgb(BRIGHT_OPTS["ref"]), load_mask(BRIGHT_OPTS["roi"]))
+    steps = [MatchBrightnessStep(cam_key=BRIGHT_OPTS["cam"], matcher=matcher)]
+    hand = make_hand_step(BRIGHT_OPTS["hand_cam"], BRIGHT_OPTS["hand_ref"], int(BRIGHT_OPTS["hand_frames"]))
+    if hand is not None:
+        steps.append(hand)
     return RobotProcessorPipeline(
-        steps=[MatchBrightnessStep(cam_key=BRIGHT_OPTS["cam"], matcher=matcher)],
+        steps=steps,
         to_transition=observation_to_transition,
         to_output=transition_to_observation,
     )
