@@ -32,6 +32,7 @@ import os
 import shlex
 import subprocess
 import sys
+import termios
 from datetime import datetime
 
 from tictactoe_core import (
@@ -137,9 +138,12 @@ def place(args, state, cfg, player, cell):
             print(shlex.join(cmd))
             return
         input(f"ストック置き場に{color}のキューブを置き、アームをホーム位置にして Enter（やめるなら Ctrl+C）")
+        print("置けたらこのターミナルで Enter（押さなくても --duration で止まります）")
         ret = subprocess.run(cmd, cwd=HERE).returncode
         if ret != 0:
             print(f"rollout が終了コード {ret} で終わりました。")
+        if sys.stdin.isatty():
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)   # Enter の押しすぎが下の質問の Y にならないように捨てる
         if input(f"マス {name} に置けましたか？ [Y/n] ").strip().lower() in ("n", "no"):
             print("記録していません。もう一度同じコマンドを実行するか、手で直してから --no_run を付けて実行してください。")
             return

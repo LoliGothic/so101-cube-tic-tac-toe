@@ -6,6 +6,7 @@ lerobot-rollout と同じ引数で動き、俯瞰カメラの画像から「盤�
   - 実行開始時の最初のフレームを「ターン開始時の画像 S」として使うので、
     アームをホーム位置（empty_board.png を撮ったときと同じ姿勢）にしてから起動すること
   - 1回の実行 = 1手 を想定（--strategy.type=base と --duration で区切る）
+  - 実行中にこのターミナルで Enter を押すと、--duration を待たずに終わる（アームはホーム位置に戻る）
 
 独自の引数:
   --erase.cam=front                 消去をかけるカメラ名（--robot.cameras で付けた名前）
@@ -36,7 +37,10 @@ lerobot-rollout と同じ引数で動き、俯瞰カメラの画像から「盤�
 
 import logging
 import os
+import select
 import sys
+import termios
+import threading
 
 import cv2
 import numpy as np
@@ -252,12 +256,35 @@ def make_obs_processor():
 _original_build_rollout_context = official_rollout.build_rollout_context
 
 
+def start_stop_key(shutdown_event):
+    """ターミナルで Enter が押されたら shutdown_event を立てるスレッドを起動する。"""
+    if not sys.stdin.isatty():
+        return None   # パイプなどでは読めるものがないので、--duration で終わるのを待つ
+    fd = sys.stdin.fileno()
+    termios.tcflush(fd, termios.TCIFLUSH)   # 準備中に押されたキーで開始直後に止まらないように捨てる
+
+    def watch():
+        while not shutdown_event.is_set():
+            if select.select([fd], [], [], 0.2)[0]:
+                # sys.stdin は使わない（読み込み中のまま終了すると、stdin のロックで Python が異常終了することがある）
+                os.read(fd, 1024)
+                logger.info("Enter が押されたので終了します")
+                shutdown_event.set()
+
+    thread = threading.Thread(target=watch, daemon=True)
+    thread.start()
+    logger.info("置けたらこのターミナルで Enter を押すと終了します")
+    return thread
+
+
 def _build_rollout_context_with_erase(cfg, shutdown_event, *args, **kwargs):
     logger.info("erase options: %s", ERASE_OPTS)
     obs_processor = make_obs_processor()   # ファイルの読み込みミスはポリシー・ロボットの準備前に気づける
     if obs_processor is not None:
         kwargs["robot_observation_processor"] = obs_processor
-    return _original_build_rollout_context(cfg, shutdown_event, *args, **kwargs)
+    ctx = _original_build_rollout_context(cfg, shutdown_event, *args, **kwargs)
+    start_stop_key(shutdown_event)
+    return ctx
 
 
 official_rollout.build_rollout_context = _build_rollout_context_with_erase
